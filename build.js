@@ -58,10 +58,16 @@ async function buildSite() {
     const collections = await getCollections();
     console.log('📦 Collections found:', collections.map(c => c.displayName).join(', '));
     
-    // Find specific collections by name (adjust these names to match your Webflow collections)
-    const postsCollection = collections.find(c => c.displayName.toLowerCase().includes('post') || c.displayName.toLowerCase().includes('topic'));
+    // Find specific collections by name
+    const postsCollection = collections.find(c => 
+      c.displayName.toLowerCase().includes('blog') || 
+      c.displayName.toLowerCase().includes('post')
+    );
     const gradesCollection = collections.find(c => c.displayName.toLowerCase().includes('grade'));
-    const topicsCollection = collections.find(c => c.displayName.toLowerCase().includes('topic') && c.displayName.toLowerCase() !== postsCollection?.displayName.toLowerCase());
+    const topicsCollection = collections.find(c => 
+      c.displayName.toLowerCase().includes('topic') && 
+      c.id !== postsCollection?.id
+    );
     
     // Fetch all items
     const posts = postsCollection ? await fetchCollectionItems(postsCollection.id) : [];
@@ -89,9 +95,9 @@ async function buildSite() {
                   <div fs-cmsfilter-field="Grades" class="grade-label">Grade</div>
                   <div fs-cmsfilter-field="Grade" class="grade-text">${field.grade || ''}</div>
                 </div>
-                <h3 fs-cmsfilter-field="" class="heading-8">${field.name || ''}</h3>
+                <h3 fs-cmsfilter-field="name" class="heading-8">${field.name || ''}</h3>
               </a>
-              <p fs-cmsfilter-field="" class="paragraph">${field.description || field.summary || ''}</p>
+              <p fs-cmsfilter-field="description" class="paragraph">${field.description || field.summary || ''}</p>
               <a href="/posts/${field.slug || '#'}" class="main-post-btn w-button">Read More</a>
             </div>
           </div>
@@ -108,13 +114,13 @@ async function buildSite() {
       const gradesList = $('.grades-collection-list');
       gradesList.empty();
       
-      grades.forEach(grade => {
+      grades.forEach((grade, index) => {
         const field = grade.fieldData;
         const gradeHTML = `
           <div role="listitem" class="w-dyn-item">
             <label class="radio-button-field-3 w-radio">
-              <input type="radio" name="radio-2" id="grade-${grade.id}" data-name="Radio 2" class="w-form-formradioinput radio-button-2 w-radio-input" value="${field.name}">
-              <span fs-cmsfilter-field="Grade" class="radio-grades w-form-label" for="grade-${grade.id}">${field.name}</span>
+              <input type="radio" name="grade-filter" id="grade-${index}" data-name="Grade Filter" class="w-form-formradioinput radio-button-2 w-radio-input" value="${field.name}">
+              <span fs-cmsfilter-field="Grade" class="radio-grades w-form-label" for="grade-${index}">${field.name}</span>
             </label>
           </div>
         `;
@@ -129,13 +135,13 @@ async function buildSite() {
       const topicsList = $('.topics-collection-list');
       topicsList.empty();
       
-      topics.forEach(topic => {
+      topics.forEach((topic, index) => {
         const field = topic.fieldData;
         const topicHTML = `
           <div role="listitem" class="w-dyn-item">
             <label class="radio-button-field-2 w-radio">
-              <input type="radio" name="radio" id="topic-${topic.id}" data-name="Radio" class="w-form-formradioinput radio-button w-radio-input" value="${field.name}">
-              <span fs-cmsfilter-field="Topics" class="radio-list w-form-label" for="topic-${topic.id}">${field.name}</span>
+              <input type="radio" name="topic-filter" id="topic-${index}" data-name="Topic Filter" class="w-form-formradioinput radio-button w-radio-input" value="${field.name}">
+              <span fs-cmsfilter-field="Topics" class="radio-list w-form-label" for="topic-${index}">${field.name}</span>
             </label>
           </div>
         `;
@@ -148,6 +154,12 @@ async function buildSite() {
     // Update counts
     $('[fs-cmsfilter-element="items-count"]').text(posts.length);
     $('[fs-cmsfilter-element="results-count"]').text(posts.length);
+    
+    // Add Finsweet CMS Filter library
+    console.log('📚 Adding Finsweet CMS Filter library...');
+    $('body').append(`
+      <script src="https://cdn.jsdelivr.net/npm/@finsweet/attributes-cmsfilter@1/cmsfilter.js"></script>
+    `);
     
     // Create dist directory if it doesn't exist
     if (!fs.existsSync('dist')) {
@@ -170,6 +182,7 @@ async function buildSite() {
     
     console.log('✅ Build completed successfully!');
     console.log(`📄 Generated: dist/index.html`);
+    console.log(`🔍 Filters enabled with Finsweet CMS Filter`);
     
   } catch (error) {
     console.error('❌ Build failed:', error.message);
