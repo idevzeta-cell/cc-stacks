@@ -6,7 +6,6 @@ const fetch = require('node-fetch');
 const API_TOKEN = process.env.WEBFLOW_API_TOKEN;
 const SITE_ID = process.env.WEBFLOW_SITE_ID;
 
-// Fetch all collections for a site
 async function getCollections() {
   const response = await fetch(
     `https://api.webflow.com/v2/sites/${SITE_ID}/collections`,
@@ -26,7 +25,6 @@ async function getCollections() {
   return data.collections;
 }
 
-// Fetch items from a collection
 async function fetchCollectionItems(collectionId) {
   const response = await fetch(
     `https://api.webflow.com/v2/collections/${collectionId}/items`,
@@ -50,15 +48,12 @@ async function buildSite() {
   try {
     console.log('🚀 Starting build process...');
     
-    // Read the HTML file
     const html = fs.readFileSync('index.html', 'utf8');
     const $ = cheerio.load(html);
     
-    // Get all collections
     const collections = await getCollections();
     console.log('📦 Collections found:', collections.map(c => c.displayName).join(', '));
     
-    // Find specific collections by name
     const postsCollection = collections.find(c => 
       c.displayName.toLowerCase().includes('blog') || 
       c.displayName.toLowerCase().includes('post')
@@ -69,7 +64,6 @@ async function buildSite() {
       c.id !== postsCollection?.id
     );
     
-    // Fetch all items
     const posts = postsCollection ? await fetchCollectionItems(postsCollection.id) : [];
     const grades = gradesCollection ? await fetchCollectionItems(gradesCollection.id) : [];
     const topics = topicsCollection ? await fetchCollectionItems(topicsCollection.id) : [];
@@ -86,18 +80,22 @@ async function buildSite() {
       posts.forEach(post => {
         const field = post.fieldData;
         const postHTML = `
-          <div role="listitem" class="collection-item-5 w-dyn-item w-col w-col-6">
+          <div role="listitem" class="collection-item-5 w-dyn-item w-col w-col-6" 
+               data-grade="${field.grade || ''}" 
+               data-topic="${field.topics || ''}" 
+               data-title="${(field.name || '').toLowerCase()}" 
+               data-description="${(field.description || field.summary || '').toLowerCase()}">
             <div class="topic-card">
               <a href="/posts/${field.slug || '#'}" class="link-block-9 w-inline-block">
                 <img loading="lazy" src="${field['main-image']?.url || 'https://d3e54v103j8qbb.cloudfront.net/plugins/Basic/assets/placeholder.60f9b1840c.svg'}" alt="${field.name || ''}" class="image-5">
-                <div fs-cmsfilter-field="Topics" class="text-block-10">${field.topics || ''}</div>
+                <div class="text-block-10">${field.topics || ''}</div>
                 <div class="div-block-24">
-                  <div fs-cmsfilter-field="Grades" class="grade-label">Grade</div>
-                  <div fs-cmsfilter-field="Grade" class="grade-text">${field.grade || ''}</div>
+                  <div class="grade-label">Grade</div>
+                  <div class="grade-text">${field.grade || ''}</div>
                 </div>
-                <h3 fs-cmsfilter-field="name" class="heading-8">${field.name || ''}</h3>
+                <h3 class="heading-8">${field.name || ''}</h3>
               </a>
-              <p fs-cmsfilter-field="description" class="paragraph">${field.description || field.summary || ''}</p>
+              <p class="paragraph">${field.description || field.summary || ''}</p>
               <a href="/posts/${field.slug || '#'}" class="main-post-btn w-button">Read More</a>
             </div>
           </div>
@@ -105,7 +103,6 @@ async function buildSite() {
         postsList.append(postHTML);
       });
       
-      // Remove "No items found" message
       $('.cms-list').siblings('.w-dyn-empty').remove();
     }
     
@@ -119,8 +116,8 @@ async function buildSite() {
         const gradeHTML = `
           <div role="listitem" class="w-dyn-item">
             <label class="radio-button-field-3 w-radio">
-              <input type="radio" name="grade-filter" id="grade-${index}" data-name="Grade Filter" class="w-form-formradioinput radio-button-2 w-radio-input" value="${field.name}">
-              <span fs-cmsfilter-field="Grade" class="radio-grades w-form-label" for="grade-${index}">${field.name}</span>
+              <input type="radio" name="grade-filter" class="w-form-formradioinput radio-button-2 w-radio-input grade-radio" value="${field.name}" data-filter-type="grade">
+              <span class="radio-grades w-form-label">${field.name}</span>
             </label>
           </div>
         `;
@@ -140,8 +137,8 @@ async function buildSite() {
         const topicHTML = `
           <div role="listitem" class="w-dyn-item">
             <label class="radio-button-field-2 w-radio">
-              <input type="radio" name="topic-filter" id="topic-${index}" data-name="Topic Filter" class="w-form-formradioinput radio-button w-radio-input" value="${field.name}">
-              <span fs-cmsfilter-field="Topics" class="radio-list w-form-label" for="topic-${index}">${field.name}</span>
+              <input type="radio" name="topic-filter" class="w-form-formradioinput radio-button w-radio-input topic-radio" value="${field.name}" data-filter-type="topic">
+              <span class="radio-list w-form-label">${field.name}</span>
             </label>
           </div>
         `;
@@ -155,13 +152,121 @@ async function buildSite() {
     $('[fs-cmsfilter-element="items-count"]').text(posts.length);
     $('[fs-cmsfilter-element="results-count"]').text(posts.length);
     
-    // Add Finsweet CMS Filter library
-    console.log('📚 Adding Finsweet CMS Filter library...');
-    $('body').append(`
-      <script src="https://cdn.jsdelivr.net/npm/@finsweet/attributes-cmsfilter@1/cmsfilter.js"></script>
-    `);
+    // Add custom filtering JavaScript
+    console.log('📚 Adding custom filter script...');
     
-    // Create dist directory if it doesn't exist
+    const filterScript = `
+    <script>
+    (function() {
+      let selectedGrade = '';
+      let selectedTopic = '';
+      let searchQuery = '';
+      
+      function filterPosts() {
+        const posts = document.querySelectorAll('.collection-item-5');
+        let visibleCount = 0;
+        
+        posts.forEach(post => {
+          const grade = post.dataset.grade || '';
+          const topic = post.dataset.topic || '';
+          const title = post.dataset.title || '';
+          const description = post.dataset.description || '';
+          const searchText = title + ' ' + description;
+          
+          let showPost = true;
+          
+          // Filter by grade
+          if (selectedGrade && grade !== selectedGrade) {
+            showPost = false;
+          }
+          
+          // Filter by topic
+          if (selectedTopic && topic !== selectedTopic) {
+            showPost = false;
+          }
+          
+          // Filter by search
+          if (searchQuery && !searchText.includes(searchQuery.toLowerCase())) {
+            showPost = false;
+          }
+          
+          if (showPost) {
+            post.style.display = '';
+            visibleCount++;
+          } else {
+            post.style.display = 'none';
+          }
+        });
+        
+        // Update counts
+        document.querySelector('[fs-cmsfilter-element="results-count"]').textContent = visibleCount;
+        
+        // Show/hide empty state
+        const emptyState = document.querySelector('[fs-cmsfilter-element="empty"]');
+        if (emptyState) {
+          emptyState.style.display = visibleCount === 0 ? 'block' : 'none';
+        }
+        
+        // Scroll to results
+        setTimeout(() => {
+          const results = document.getElementById('resultsList');
+          if (results) {
+            const y = results.getBoundingClientRect().top + window.pageYOffset;
+            window.scrollTo({ top: y, behavior: 'smooth' });
+          }
+        }, 100);
+      }
+      
+      // Grade filter
+      document.querySelectorAll('.grade-radio').forEach(radio => {
+        radio.addEventListener('change', function() {
+          selectedGrade = this.value;
+          filterPosts();
+        });
+      });
+      
+      // Topic filter
+      document.querySelectorAll('.topic-radio').forEach(radio => {
+        radio.addEventListener('change', function() {
+          selectedTopic = this.value;
+          filterPosts();
+        });
+      });
+      
+      // Search filter
+      const searchInput = document.querySelector('.search-bar');
+      if (searchInput) {
+        searchInput.addEventListener('input', function() {
+          searchQuery = this.value;
+          filterPosts();
+        });
+      }
+      
+      // Clear button
+      const clearBtn = document.querySelector('[fs-cmsfilter-element="clear"]');
+      if (clearBtn) {
+        clearBtn.addEventListener('click', function(e) {
+          e.preventDefault();
+          selectedGrade = '';
+          selectedTopic = '';
+          searchQuery = '';
+          
+          // Uncheck all radios
+          document.querySelectorAll('.grade-radio, .topic-radio').forEach(r => r.checked = false);
+          
+          // Clear search input
+          if (searchInput) searchInput.value = '';
+          
+          filterPosts();
+        });
+      }
+    })();
+    </script>
+    `;
+    
+    $('body').append(filterScript);
+    
+    // Create dist directory
     if (!fs.existsSync('dist')) {
       fs.mkdirSync('dist', { recursive: true });
     }
@@ -177,12 +282,12 @@ async function buildSite() {
       fs.cpSync('css', 'dist/css', { recursive: true });
     }
     
-    // Save the updated HTML
+    // Save HTML
     fs.writeFileSync('dist/index.html', $.html());
     
     console.log('✅ Build completed successfully!');
     console.log(`📄 Generated: dist/index.html`);
-    console.log(`🔍 Filters enabled with Finsweet CMS Filter`);
+    console.log(`🔍 Custom filters enabled`);
     
   } catch (error) {
     console.error('❌ Build failed:', error.message);
